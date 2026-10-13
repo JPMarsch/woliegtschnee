@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Erzeugte Schneedaten (täglich neu)
+backend/data/snow_*
+*.nc
+*.tmp*
+*.download
+
+.DS_Store
+.env

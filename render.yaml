@@ -1,0 +1,21 @@
+# Render Blueprint – Backend als kostenloser Python-Web-Service.
+# Frontend läuft auf Vercel, der tägliche ERA5-Import über GitHub Actions.
+services:
+  - type: web
+    name: woliegtschnee-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    # Demo-Daten nur als Fallback, bis der Sync die echten Daten geholt hat.
+    buildCommand: pip install -r requirements.txt && python -m scripts.make_demo_data
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/status
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.15"
+      - key: DATA_URL
+        value: https://github.com/JPMarsch/woliegtschnee/releases/download/snow-data
+      - key: DATA_SYNC_HOURS
+        value: "3"
+      - key: NOMINATIM_USER_AGENT
+        sync: false

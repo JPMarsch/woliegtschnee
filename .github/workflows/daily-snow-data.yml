@@ -1,0 +1,42 @@
+name: Tägliche Schneedaten (ERA5-Land)
+
+on:
+  schedule:
+    - cron: "30 6 * * *"   # täglich 06:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120   # CDS-Warteschlange kann dauern
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements-ingest.txt
+      - run: pip install -r requirements-ingest.txt
+
+      - name: ERA5-Land importieren
+        env:
+          CDSAPI_URL: https://cds.climate.copernicus.eu/api
+          CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: python -m scripts.ingest_era5
+
+      - name: Als Release „snow-data“ veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view snow-data >/dev/null 2>&1 || \
+            gh release create snow-data --title "Aktuelle Schneedaten" --notes "Wird täglich automatisch aktualisiert." --latest=false
+          # Metadatei zuletzt hochladen, da der Server daran neue Daten erkennt.
+          gh release upload snow-data data/snow_grid.npz data/snow_overlay.png --clobber
+          gh release upload snow-data data/snow_meta.json --clobber
+
