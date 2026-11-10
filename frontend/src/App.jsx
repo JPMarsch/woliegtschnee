@@ -163,20 +163,19 @@ export default function App() {
               <span className="unit">cm</span>
             </div>
           )}
-          <details className="disclaimer">
-            <summary>
-              <span className="info-icon" aria-hidden="true">i</span>
-              Über die Daten
-            </summary>
-            <p>
+          <span className="info">
+            <button type="button" className="info-icon" aria-label="Hinweis zu den Daten" aria-describedby="data-hint">
+              i
+            </button>
+            <span className="info-tip" role="tooltip" id="data-hint">
               Die Schneehöhen stammen aus dem Reanalyse-Modell{" "}
               <a href="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land" target="_blank" rel="noreferrer">
                 Copernicus ERA5-Land
               </a>
               . Es sind modellierte Mittelwerte für Rasterzellen von ca. 9 × 9 km, keine Messungen an einem
               bestimmten Ort. Vor Ort kann die Schneelage deutlich abweichen – besonders in steilem Gelände.
-            </p>
-          </details>
+            </span>
+          </span>
           <p className="credits">
             Enthält modifizierte Copernicus-Climate-Change-Service-Informationen. Adresssuche & Karte: ©
             OpenStreetMap-Mitwirkende.
