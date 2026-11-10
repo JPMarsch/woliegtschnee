@@ -421,10 +421,51 @@ footer {
 .disclaimer {
   font-size: 0.8rem;
   line-height: 1.45;
+  margin: 12px 0 8px;
+}
+
+.disclaimer summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 2px 6px 2px 2px;
+}
+
+.disclaimer summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclaimer summary:hover,
+.disclaimer[open] summary {
+  color: var(--accent);
+}
+
+.disclaimer summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.info-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font: italic 700 0.7rem/1 Georgia, "Times New Roman", serif;
+  flex: none;
+}
+
+.disclaimer p {
   background: var(--bg-soft);
   border-radius: 10px;
   padding: 10px 12px;
-  margin: 12px 0 8px;
+  margin: 6px 0 0;
 }
 
 .credits {
