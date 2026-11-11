@@ -2,3 +2,5 @@
 cdsapi==0.7.7
 xarray==2026.9.0
 netCDF4==1.7.4
+cfgrib==0.9.15.1
+eccodes==2.50.0

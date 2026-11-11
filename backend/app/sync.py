@@ -2,7 +2,8 @@
 
 - DATA_URL gesetzt: regelmäßig fertig verarbeitete Dateien von dort holen
   (empfohlen; die GitHub Action veröffentlicht sie täglich als Release).
-- INGEST_ON_SERVER=1: ERA5-Land einmal täglich direkt im Server importieren.
+- INGEST_ON_SERVER=1: direkt im Server importieren (INGEST_SOURCE=gfs alle 6 h,
+  INGEST_SOURCE=era5 einmal täglich).
 """
 
 from __future__ import annotations
@@ -49,12 +50,12 @@ def sync_from_url() -> bool:
     return True
 
 
-def _needs_ingest() -> bool:
+def _needs_ingest(max_age_hours: float) -> bool:
     meta = _local_meta()
     if not meta or meta.get("demo"):
         return True
     created = datetime.fromisoformat(meta["created_at"])
-    return (datetime.now(timezone.utc) - created).total_seconds() > 20 * 3600
+    return (datetime.now(timezone.utc) - created).total_seconds() > max_age_hours * 3600
 
 
 def _loop(task, interval_s: float, name: str, run_first: bool = True):
@@ -82,10 +83,17 @@ def start_background_jobs():
             daemon=True,
         ).start()
     if config.INGEST_ON_SERVER:
-        from .era5 import ingest_latest
+        if config.INGEST_SOURCE == "era5":
+            from .era5 import ingest_latest
+
+            max_age_hours, name = 20, "ERA5-Import"
+        else:
+            from .gfs import ingest_latest
+
+            max_age_hours, name = 5.5, "GFS-Import"
 
         def ingest_if_due():
-            if _needs_ingest():
+            if _needs_ingest(max_age_hours):
                 ingest_latest(config.DATA_DIR)
 
-        threading.Thread(target=_loop, args=(ingest_if_due, 3600, "ERA5-Import"), daemon=True).start()
+        threading.Thread(target=_loop, args=(ingest_if_due, 1800, name), daemon=True).start()

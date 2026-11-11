@@ -88,11 +88,13 @@ class SnowIndex:
         now = now or datetime.now(timezone.utc)
         valid_time = datetime.fromisoformat(self.meta["valid_time"])
         age_days = (now - valid_time).total_seconds() / 86400
+        # Jede Quelle kann ihre eigene Grenze mitbringen (GFS: 2 Tage, ERA5-Land: 10).
+        stale_after = self.meta.get("stale_after_days", config.STALE_AFTER_DAYS)
         return {
             **self.meta,
             "age_days": round(age_days, 1),
-            "stale": age_days > config.STALE_AFTER_DAYS,
-            "stale_after_days": config.STALE_AFTER_DAYS,
+            "stale": age_days > stale_after,
+            "stale_after_days": stale_after,
             "snow_cells": self.snow_cells,
             "valid_cells": self.valid_cells,
             "max_depth_cm": self.max_depth_cm,

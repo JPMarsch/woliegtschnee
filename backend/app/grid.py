@@ -64,6 +64,7 @@ def save_dataset(
     valid_time: datetime,
     demo: bool = False,
     note: str = "",
+    extra: dict | None = None,
 ) -> dict:
     """Raster, Overlay und Metadaten atomar schreiben. Die Metadatei kommt
     zuletzt, damit der Server erst neu lädt, wenn alles vollständig ist."""
@@ -87,6 +88,7 @@ def save_dataset(
         "resolution_deg": round(resolution, 4),
         "shape": list(depth_cm.shape),
         "note": note,
+        **(extra or {}),
     }
     tmp_meta = out_dir / (config.META_FILE + ".tmp")
     tmp_meta.write_text(json.dumps(meta, indent=2))

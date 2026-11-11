@@ -2,7 +2,7 @@
 
 Eine Website, die weltweit das **nächstgelegene Gebiet mit einer frei wählbaren Mindestschneehöhe** findet – mit Luftlinie und Auto-Route über Google Maps.
 
-> **Wichtig:** Die Schneehöhen stammen aus dem Reanalyse-Modell **Copernicus ERA5-Land**. Es sind modellierte Mittelwerte für Rasterzellen von ca. 9 × 9 km (0,1°), keine Messungen an einem bestimmten Ort. Die Website zeigt das an, ebenso den Datenstand und ob die Daten veraltet oder Demo-Daten sind.
+> **Wichtig:** Die Schneehöhen stammen standardmäßig aus dem Wettermodell **NOAA GFS** (Analyse, alle 6 Stunden neu, ca. 25 × 25 km / 0,25°). Alternativ lässt sich das Reanalyse-Modell **Copernicus ERA5-Land** importieren (ca. 9 × 9 km, aber ~5 Tage Verzögerung). Beides sind modellierte Mittelwerte für Rasterzellen, keine Messungen an einem bestimmten Ort. Die Website zeigt das an, ebenso den Datenstand und ob die Daten veraltet oder Demo-Daten sind.
 
 ## Funktionen
 
@@ -23,11 +23,13 @@ backend/                 Python (FastAPI)
     main.py              API: /api/status, /api/nearest, /api/geocode, /api/overlay.png
     snowdata.py          Schneeindex + Suche nach der nächsten Zelle
     grid.py              Rasterformat (uint16-cm in .npz), Web-Mercator-Overlay
+    gfs.py               Download + Verarbeitung NOAA GFS (aktuell, ohne Konto)
     era5.py              Download + Verarbeitung ERA5-Land über die CDS-API
     geocode.py           Nominatim-Proxy mit Cache und Rate-Limit
     sync.py              Hintergrund-Aktualisierung (DATA_URL / Import im Server)
   scripts/
-    ingest_era5.py       Täglicher Import
+    ingest_gfs.py        Import GFS (Standard, alle 6 h)
+    ingest_era5.py       Import ERA5-Land (optional)
     make_demo_data.py    Synthetische Demo-Daten (ohne CDS-Konto)
   data/                  erzeugte Schneedaten (nicht versioniert)
   tests/
@@ -57,7 +59,17 @@ npm run dev                                    # http://localhost:5173
 
 Tests: `cd backend && .venv/bin/pytest`
 
-## Echte Schneedaten (ERA5-Land)
+## Aktuelle Schneedaten (NOAA GFS) – Standard
+
+Kein Konto nötig:
+
+```bash
+cd backend && .venv/bin/python -m scripts.ingest_gfs
+```
+
+Der Import nimmt den jüngsten fertigen GFS-Lauf (00/06/12/18 UTC, verfügbar ca. 4 h danach), lädt über den NOMADS-Filter nur die Felder `SNOD` (Schneehöhe, m) und `LAND` (Land-See-Maske, ~1 MB) – Fallback: AWS Open Data per Byte-Range –, blendet Wasser und Meereis aus und speichert das Raster wie oben. Daten gelten nach 2 Tagen als veraltet. Eine vorhandene GRIB2-Datei: `--file datei.grib2 --cycle 2026-11-10T00`.
+
+## Geprüfte Schneedaten (ERA5-Land) – optional
 
 1. Kostenloses Konto auf <https://cds.climate.copernicus.eu> anlegen.
 2. Auf der Datensatzseite **ERA5-Land hourly data from 1950 to present** unter „Download“ die Lizenz akzeptieren.
@@ -81,8 +93,8 @@ GitHub Actions (täglicher Cron)  ──►  GitHub-Release „snow-data“
 Vercel (Frontend)  ── /api/* ──►  Render (Python-Backend)
 ```
 
-1. **GitHub – täglicher Import:** Die Action `.github/workflows/daily-snow-data.yml` läuft täglich um 06:30 UTC, importiert ERA5-Land und veröffentlicht die Dateien als Release `snow-data`.
-   → Unter *Settings → Secrets and variables → Actions* das Secret `CDSAPI_KEY` anlegen.
+1. **GitHub – Import:** Die Action `.github/workflows/daily-snow-data.yml` läuft alle 6 Stunden (04:20/10:20/16:20/22:20 UTC), importiert NOAA GFS und veröffentlicht die Dateien als Release `snow-data`. Manuell kann unter *Run workflow* stattdessen `era5` gewählt werden.
+   → Nur für ERA5: unter *Settings → Secrets and variables → Actions* das Secret `CDSAPI_KEY` anlegen.
    → Einmal manuell unter *Actions → Run workflow* starten, damit das Release existiert.
 2. **Render – Backend:** *New → Blueprint* und dieses Repo wählen; `render.yaml` legt den Free-Web-Service `woliegtschnee-api` an. Beim Start und danach alle 3 Stunden holt er die Daten aus dem Release (bis dahin Demo-Daten, deutlich gekennzeichnet).
    → `NOMINATIM_USER_AGENT` mit Kontaktadresse setzen (Pflicht laut Nominatim-Richtlinie).
@@ -99,19 +111,21 @@ Eine eigene Domain wird später in Vercel hinterlegt.
 |---|---|---|
 | `DATA_URL` | Basis-URL mit `snow_meta.json`, `snow_grid.npz`, `snow_overlay.png` | – |
 | `DATA_SYNC_HOURS` | Abfrageintervall für `DATA_URL` | `6` |
-| `INGEST_ON_SERVER` | `1` = ERA5-Import im Server-Prozess | `0` |
-| `STALE_AFTER_DAYS` | Ab wann Daten als veraltet gelten | `10` |
+| `INGEST_ON_SERVER` | `1` = Import im Server-Prozess | `0` |
+| `INGEST_SOURCE` | Quelle für den Server-Import: `gfs` oder `era5` | `gfs` |
+| `STALE_AFTER_DAYS` | Ab wann Daten als veraltet gelten (wenn die Quelle keine eigene Grenze mitbringt; GFS: 2) | `10` |
 | `NOMINATIM_USER_AGENT` | User-Agent mit Kontakt für die Adresssuche | Projekt-URL |
 | `CORS_ORIGINS` | Erlaubte Origins, nur nötig ohne Vercel-Weiterleitung | `http://localhost:5173` |
 | `VITE_API_BASE` | (Frontend-Build) API-URL, nur nötig ohne Vercel-Weiterleitung | gleiche Herkunft |
 
 ## Bekannte Grenzen
 
-- **Modellwerte:** ERA5-Land-Zellen sind ~9 km groß; in Gebirgen liegen Gipfel und Täler in derselben Zelle. Gletscher und Eisschilde (Grönland, Antarktis) erscheinen mit sehr großen Schneehöhen.
-- **Verzögerung:** Die Daten sind regulär ~5 Tage alt. Ab 10 Tagen wird „veraltet“ angezeigt.
+- **Modellwerte:** GFS-Zellen sind ~25 km, ERA5-Land-Zellen ~9 km groß; in Gebirgen liegen Gipfel und Täler in derselben Zelle, GFS unterschätzt dort oft. Gletscher und Eisschilde (Grönland, Antarktis) erscheinen mit sehr großen Schneehöhen.
+- **Verzögerung:** GFS ist wenige Stunden alt (veraltet ab 2 Tagen), ERA5-Land ~5 Tage (veraltet ab 10 Tagen).
 - **Auto-Route:** Google Maps entscheidet selbst, ob eine Route existiert (z. B. nicht über Ozeane).
 
 ## Datenquellen & Lizenzen
 
-- Schneehöhe: Copernicus Climate Change Service, ERA5-Land (Muñoz Sabater, 2019). *Enthält modifizierte Copernicus-Climate-Change-Service-Informationen.*
+- Schneehöhe (Standard): NOAA/NCEP Global Forecast System (GFS), gemeinfrei.
+- Schneehöhe (optional): Copernicus Climate Change Service, ERA5-Land (Muñoz Sabater, 2019). *Enthält modifizierte Copernicus-Climate-Change-Service-Informationen.*
 - Karte & Geocoding: © OpenStreetMap-Mitwirkende (ODbL), Nominatim

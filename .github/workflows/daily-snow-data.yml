@@ -1,17 +1,28 @@
-name: Tägliche Schneedaten (ERA5-Land)
+name: Schneedaten aktualisieren
 
 on:
   schedule:
-    - cron: "30 6 * * *"   # täglich 06:30 UTC
+    # Kurz nach Verfügbarkeit der GFS-Läufe (00/06/12/18 UTC + ~4 h)
+    - cron: "20 4,10,16,22 * * *"
   workflow_dispatch:
+    inputs:
+      source:
+        description: "Datenquelle"
+        type: choice
+        options: [gfs, era5]
+        default: gfs
 
 permissions:
   contents: write
 
+concurrency:
+  group: snow-data
+  cancel-in-progress: false
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 120   # CDS-Warteschlange kann dauern
+    timeout-minutes: 120   # CDS-Warteschlange (ERA5) kann dauern
     defaults:
       run:
         working-directory: backend
@@ -24,7 +35,12 @@ jobs:
           cache-dependency-path: backend/requirements-ingest.txt
       - run: pip install -r requirements-ingest.txt
 
+      - name: NOAA GFS importieren
+        if: ${{ (inputs.source || 'gfs') == 'gfs' }}
+        run: python -m scripts.ingest_gfs
+
       - name: ERA5-Land importieren
+        if: ${{ inputs.source == 'era5' }}
         env:
           CDSAPI_URL: https://cds.climate.copernicus.eu/api
           CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
@@ -35,8 +51,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view snow-data >/dev/null 2>&1 || \
-            gh release create snow-data --title "Aktuelle Schneedaten" --notes "Wird täglich automatisch aktualisiert." --latest=false
+            gh release create snow-data --title "Aktuelle Schneedaten" --notes "Wird automatisch aktualisiert." --latest=false
           # Metadatei zuletzt hochladen, da der Server daran neue Daten erkennt.
           gh release upload snow-data data/snow_grid.npz data/snow_overlay.png --clobber
           gh release upload snow-data data/snow_meta.json --clobber
-

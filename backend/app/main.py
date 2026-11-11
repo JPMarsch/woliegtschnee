@@ -40,6 +40,11 @@ app = FastAPI(title="Wo liegt Schnee?", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["GET"], allow_headers=["*"])
 
 
+def _disclaimer(index) -> str:
+    # Neuere Datensätze bringen ihren Hinweis selbst mit (z. B. GFS).
+    return index.meta.get("disclaimer") or DISCLAIMER
+
+
 def _require_index():
     index = store.get()
     if index is None:
@@ -50,7 +55,7 @@ def _require_index():
 @app.get("/api/status")
 def status():
     index = _require_index()
-    return {**index.status(), "disclaimer": DISCLAIMER}
+    return {**index.status(), "disclaimer": _disclaimer(index)}
 
 
 @app.get("/api/nearest")
@@ -68,7 +73,7 @@ def nearest(
             "min_cm": min_cm,
             "max_depth_cm": index.max_depth_cm,
             "data": data_status,
-            "disclaimer": DISCLAIMER,
+            "disclaimer": _disclaimer(index),
         }
 
     directions = "https://www.google.com/maps/dir/?" + urlencode({
@@ -93,7 +98,7 @@ def nearest(
         "at_start": hit.distance_km <= index.lat_step * 111.32 * 0.75,
         "car": {"google_maps_url": directions},
         "data": data_status,
-        "disclaimer": DISCLAIMER,
+        "disclaimer": _disclaimer(index),
     }
 
 

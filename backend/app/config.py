@@ -12,6 +12,7 @@ META_FILE = "snow_meta.json"
 OVERLAY_FILE = "snow_overlay.png"
 
 # Ab wie vielen Tagen Alter der Datenstand als veraltet gilt.
+# Gilt für Daten ohne eigene Grenze in den Metadaten (GFS bringt 2 Tage mit).
 # ERA5-Land hat regulär ~5 Tage Verzögerung, daher großzügig.
 STALE_AFTER_DAYS = int(os.environ.get("STALE_AFTER_DAYS", "10"))
 
@@ -20,8 +21,10 @@ STALE_AFTER_DAYS = int(os.environ.get("STALE_AFTER_DAYS", "10"))
 DATA_URL = os.environ.get("DATA_URL", "").rstrip("/")
 DATA_SYNC_HOURS = float(os.environ.get("DATA_SYNC_HOURS", "6"))
 
-# Optional: täglicher ERA5-Import direkt im Server-Prozess (braucht CDS-Zugang).
+# Optional: Import direkt im Server-Prozess. Quelle „gfs“ (aktuell, ohne Konto)
+# oder „era5“ (braucht CDS-Zugang).
 INGEST_ON_SERVER = os.environ.get("INGEST_ON_SERVER", "0") == "1"
+INGEST_SOURCE = os.environ.get("INGEST_SOURCE", "gfs").lower()
 
 # Nominatim verlangt einen aussagekräftigen User-Agent mit Kontakt.
 NOMINATIM_URL = os.environ.get("NOMINATIM_URL", "https://nominatim.openstreetmap.org")

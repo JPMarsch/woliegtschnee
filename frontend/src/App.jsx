@@ -37,6 +37,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const isGfs = /GFS/i.test(status?.source ?? "");
 
   useEffect(() => {
     // Render Free schläft bei Inaktivität; das Aufwachen dauert bis ~1 Minute.
@@ -168,17 +169,33 @@ export default function App() {
               i
             </button>
             <span className="info-tip" role="tooltip" id="data-hint">
-              Die Schneehöhen stammen aus dem Reanalyse-Modell{" "}
-              <a href="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land" target="_blank" rel="noreferrer">
-                Copernicus ERA5-Land
-              </a>
-              . Es sind modellierte Mittelwerte für Rasterzellen von ca. 9 × 9 km, keine Messungen an einem
-              bestimmten Ort. Vor Ort kann die Schneelage deutlich abweichen – besonders in steilem Gelände.
+              {isGfs ? (
+                <>
+                  Die Schneehöhen stammen aus dem Wettermodell{" "}
+                  <a href="https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast" target="_blank" rel="noreferrer">
+                    NOAA GFS
+                  </a>{" "}
+                  (Analyse des jüngsten Modelllaufs, alle 6 Stunden neu). Es sind modellierte Mittelwerte für
+                  Rasterzellen von ca. 25 × 25 km, keine Messungen an einem bestimmten Ort.
+                </>
+              ) : (
+                <>
+                  Die Schneehöhen stammen aus dem Reanalyse-Modell{" "}
+                  <a href="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land" target="_blank" rel="noreferrer">
+                    Copernicus ERA5-Land
+                  </a>
+                  . Es sind modellierte Mittelwerte für Rasterzellen von ca. 9 × 9 km, keine Messungen an einem
+                  bestimmten Ort.
+                </>
+              )}{" "}
+              Vor Ort kann die Schneelage deutlich abweichen – besonders in steilem Gelände.
             </span>
           </span>
           <p className="credits">
-            Enthält modifizierte Copernicus-Climate-Change-Service-Informationen. Adresssuche & Karte: ©
-            OpenStreetMap-Mitwirkende.
+            {isGfs
+              ? "Schneedaten: NOAA/NCEP Global Forecast System."
+              : "Enthält modifizierte Copernicus-Climate-Change-Service-Informationen."}{" "}
+            Adresssuche & Karte: © OpenStreetMap-Mitwirkende.
           </p>
         </footer>
       </aside>
@@ -193,13 +210,13 @@ function DataBadge({ status, error }) {
     <>
       <div className="databadge" title={`Erzeugt: ${dateTime(status.created_at)}`}>
         <span>Datenstand</span>
-        <strong>{date(status.valid_time)}</strong>
+        <strong>{/GFS/i.test(status.source) ? dateTime(status.valid_time) : date(status.valid_time)}</strong>
         <span className="src">{status.source}</span>
       </div>
       {status.demo && (
         <div className="banner warn">
-          <strong>Demo-Daten:</strong> Die angezeigten Schneehöhen sind erfunden. Für echte Werte den ERA5-Import
-          einrichten.
+          <strong>Demo-Daten:</strong> Die angezeigten Schneehöhen sind erfunden. Für echte Werte den GFS- oder
+          ERA5-Import ausführen.
         </div>
       )}
       {status.stale && (
