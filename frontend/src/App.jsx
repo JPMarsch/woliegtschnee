@@ -105,14 +105,49 @@ export default function App() {
     window.history.replaceState(null, "", `${window.location.pathname}?${p}`);
   }, [start, minCm, day]);
 
+  const [mapPick, setMapPick] = useState(false); // Startpunkt per Kartenklick wählen
+
   const pickStart = useCallback((s) => {
     setStart(s);
+    setMapPick(false);
     setCollapsed(false);
   }, []);
 
+  const toggleMapPick = useCallback(() => {
+    setMapPick((on) => {
+      // Auf dem Smartphone das Panel einklappen, damit die Karte frei ist
+      if (!on && window.innerWidth < 760) setCollapsed(true);
+      if (on) setCollapsed(false);
+      return !on;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!mapPick) return;
+    const onKey = (e) => e.key === "Escape" && toggleMapPick();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mapPick, toggleMapPick]);
+
   return (
     <div className="app">
-      <MapView start={start} result={result} status={status} day={day} showOverlay={showOverlay} onPick={pickStart} />
+      <MapView
+        start={start}
+        result={result}
+        status={status}
+        day={day}
+        showOverlay={showOverlay}
+        picking={mapPick}
+        onPick={pickStart}
+      />
+      {mapPick && (
+        <div className="pickhint" role="status">
+          <span>📍 Tippe auf die Karte für den Startpunkt</span>
+          <button type="button" className="btn" onClick={toggleMapPick}>
+            Abbrechen
+          </button>
+        </div>
+      )}
 
       <aside className={`panel ${collapsed ? "collapsed" : ""}`}>
         <button className="grip" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? "Panel ausklappen" : "Panel einklappen"}>
@@ -129,14 +164,14 @@ export default function App() {
 
         <section>
           <h2>1 · Startpunkt</h2>
-          <StartPicker onPick={pickStart} />
+          <StartPicker onPick={pickStart} mapPick={mapPick} onToggleMapPick={toggleMapPick} />
           <p className="hint">
             {start ? (
               <>
                 <strong>{start.label}</strong> · {coords(start.lat, start.lon)}
               </>
             ) : (
-              "…oder einfach auf die Karte tippen."
+              "Noch kein Startpunkt gewählt."
             )}
           </p>
         </section>
@@ -474,7 +509,7 @@ function Calendar({ available, selected, todayDate, onPick, onClose }) {
   );
 }
 
-function StartPicker({ onPick }) {
+function StartPicker({ onPick, mapPick, onToggleMapPick }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -523,6 +558,9 @@ function StartPicker({ onPick }) {
     <div className="startpicker">
       <button className="btn primary" onClick={locate} disabled={busy === "gps"}>
         {busy === "gps" ? "Ortung läuft …" : "📍 Meinen Standort verwenden"}
+      </button>
+      <button className={`btn ${mapPick ? "active" : ""}`} onClick={onToggleMapPick} aria-pressed={mapPick}>
+        {mapPick ? "✕ Kartenauswahl beenden" : "🗺️ Auf der Karte wählen"}
       </button>
       <form className="search" onSubmit={search}>
         <input

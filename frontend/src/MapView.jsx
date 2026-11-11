@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import { ImageOverlay, MapContainer, Marker, Polyline, Rectangle, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { overlayUrl } from "./api.js";
@@ -12,8 +12,35 @@ const OVERLAY_BOUNDS = [
 const startIcon = L.divIcon({ className: "pin pin-start", html: "<span>📍</span>", iconSize: [32, 32], iconAnchor: [16, 30] });
 const snowIcon = L.divIcon({ className: "pin pin-snow", html: "<span>❄️</span>", iconSize: [36, 36], iconAnchor: [18, 18] });
 
-function ClickHandler({ onPick }) {
-  useMapEvents({ click: (e) => onPick({ lat: e.latlng.lat, lon: e.latlng.wrap().lng, label: "Punkt auf der Karte" }) });
+/** Setzt den Startpunkt nur im Auswahlmodus und nur bei einem echten Klick/Tipp –
+ *  Verschieben oder Zoomen der Karte zählt nie als Auswahl. */
+function ClickHandler({ active, onPick }) {
+  const down = useRef(null);
+  const moved = useRef(false);
+  const map = useMapEvents({
+    dragstart: () => (moved.current = true),
+    zoomstart: () => (moved.current = true),
+    click: (e) => {
+      if (!active || moved.current) return;
+      const ev = e.originalEvent;
+      if (down.current && ev && Math.hypot(ev.clientX - down.current.x, ev.clientY - down.current.y) > 6) return;
+      onPick({ lat: e.latlng.lat, lon: e.latlng.wrap().lng, label: "Punkt auf der Karte" });
+    },
+  });
+
+  useEffect(() => {
+    const el = map.getContainer();
+    const onDown = (e) => {
+      down.current = { x: e.clientX, y: e.clientY };
+      moved.current = false;
+    };
+    el.addEventListener("pointerdown", onDown);
+    return () => el.removeEventListener("pointerdown", onDown);
+  }, [map]);
+
+  useEffect(() => {
+    map.getContainer().classList.toggle("picking", active);
+  }, [map, active]);
   return null;
 }
 
@@ -27,7 +54,7 @@ function FitView({ start, path }) {
   return null;
 }
 
-export default function MapView({ start, result, status, day, showOverlay, onPick }) {
+export default function MapView({ start, result, status, day, showOverlay, picking, onPick }) {
   const found = result?.found ? result : null;
 
   // Großkreis-Linie; Schneemarker und Zelle auf die „entfaltete“ Länge schieben,
@@ -50,7 +77,7 @@ export default function MapView({ start, result, status, day, showOverlay, onPic
       {showOverlay && status && (
         <ImageOverlay url={overlayUrl(status.created_at, day)} bounds={OVERLAY_BOUNDS} opacity={0.85} />
       )}
-      <ClickHandler onPick={onPick} />
+      <ClickHandler active={picking} onPick={onPick} />
       <FitView start={start} path={path} />
 
       {start && <Marker position={[start.lat, start.lon]} icon={startIcon}><Tooltip>Start</Tooltip></Marker>}

@@ -67,6 +67,48 @@ body {
   background: #aad3df;
 }
 
+/* Auswahlmodus: Fadenkreuz statt Hand (beim Ziehen bleibt die Hand) */
+.map.picking {
+  cursor: crosshair;
+}
+
+.map.picking.leaflet-drag-target,
+.map.picking:active {
+  cursor: grabbing;
+}
+
+.pickhint {
+  position: absolute;
+  z-index: 1001;
+  top: 16px;
+  left: calc(50% + 206px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 14px;
+  background: var(--accent-strong);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.pickhint .btn {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 759px) {
+  .pickhint {
+    left: 50%;
+    width: max-content;
+    white-space: normal;
+  }
+}
+
 /* ---------- Panel ---------- */
 .panel {
   position: absolute;
@@ -784,4 +826,10 @@ a {
 .daylegend .sw.forecast {
   margin-left: 8px;
   border: 1px dashed var(--accent);
+}
+
+.btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
