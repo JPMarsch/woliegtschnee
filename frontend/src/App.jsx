@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDays, fetchNearest, fetchStatus, geocode } from "./api.js";
-import { coords, date, dateTime, dayChip, km } from "./format.js";
+import { coords, date, dateTime, km } from "./format.js";
 import MapView from "./MapView.jsx";
 
 const PRESETS = [5, 10, 20, 50, 100];
@@ -264,65 +264,136 @@ function SourceInfo({ status, isGfs }) {
   );
 }
 
-/** Tagesauswahl: vergangene Tage, heute, Prognose (waagrecht scrollbar). */
-function DayPicker({ days, day, onChange }) {
-  const strip = useRef(null);
-  const todayDate = days.find((d) => d.kind === "today")?.date;
-  const selected = day ?? todayDate;
-  const past = days.filter((d) => d.kind === "past");
+const QUICK_DAYS = [
+  [-7, "Vor 1 Woche"],
+  [-1, "Gestern"],
+  [0, "Heute"],
+  [1, "Morgen"],
+  [7, "In 1 Woche"],
+];
 
-  // Ausgewählten Tag in den sichtbaren Bereich scrollen
+const addDays = (isoDate, n) => {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+const toGerman = (isoDate) => (isoDate ? isoDate.split("-").reverse().join(".") : "");
+
+/** "13.11.2026", "13.11.26", "13.11." oder "2026-11-13" → "2026-11-13" (sonst null) */
+function parseDate(text, fallbackYear) {
+  const t = text.trim();
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return isoFrom(+m[1], +m[2], +m[3]);
+  m = t.match(/^(\d{1,2})\.(\d{1,2})\.?(\d{2}|\d{4})?$/);
+  if (!m) return null;
+  const year = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : fallbackYear;
+  return isoFrom(year, +m[2], +m[1]);
+}
+
+function isoFrom(y, mo, d) {
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return null; // z. B. 31.02.
+  return date.toISOString().slice(0, 10);
+}
+
+/** Tagesauswahl: Datum eintippen oder im Kalender wählen, plus Schnellwahl. */
+function DayPicker({ days, day, onChange }) {
+  const todayDate = days.find((d) => d.kind === "today")?.date ?? new Date().toISOString().slice(0, 10);
+  const selected = day ?? todayDate;
+  const available = new Map(days.map((d) => [d.date, d]));
+  const first = days[0].date;
+  const last = days[days.length - 1].date;
+
+  const [text, setText] = useState(toGerman(selected));
+  const [msg, setMsg] = useState(null);
+  const calendar = useRef(null);
+
   useEffect(() => {
-    const el = strip.current?.querySelector(".active");
-    if (el) el.scrollIntoView({ block: "nearest", inline: "center" });
+    setText(toGerman(selected));
+    setMsg(null);
   }, [selected]);
 
-  const pick = (d) => onChange(d.kind === "today" ? null : d.date);
-  const jump = (value) => {
-    const d = days.find((x) => x.date === value);
-    if (d) pick(d);
+  const go = (iso) => {
+    const entry = available.get(iso);
+    if (!entry) {
+      setMsg(
+        iso
+          ? `Für den ${toGerman(iso)} gibt es keine Daten. Verfügbar: ${toGerman(first)} – ${toGerman(last)}.`
+          : "Bitte ein Datum wie 13.11.2026 eingeben.",
+      );
+      return;
+    }
+    setMsg(null);
+    onChange(entry.kind === "today" ? null : iso);
+  };
+
+  const submit = (e) => {
+    e.preventDefault();
+    go(parseDate(text, Number(selected.slice(0, 4))));
+  };
+
+  const openCalendar = () => {
+    const el = calendar.current;
+    if (!el) return;
+    try {
+      el.showPicker();
+    } catch {
+      el.focus();
+    }
   };
 
   return (
     <div className="daypicker">
-      <div className="daypicker-head">
-        <span>Tag</span>
-        {past.length > 7 && (
-          <input
-            type="date"
-            className="daypicker-date"
-            min={days[0].date}
-            max={days[days.length - 1].date}
-            value={selected ?? ""}
-            onChange={(e) => jump(e.target.value)}
-            aria-label="Datum wählen"
-          />
-        )}
+      <form className="daypicker-box" onSubmit={submit}>
+        <label htmlFor="day-input">Tag</label>
+        <input
+          id="day-input"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="TT.MM.JJJJ"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={submit}
+          aria-describedby={msg ? "day-msg" : undefined}
+        />
+        <button type="button" className="daypicker-cal" onClick={openCalendar} aria-label="Kalender öffnen" title="Kalender">
+          📅
+        </button>
+        <input
+          ref={calendar}
+          type="date"
+          className="daypicker-native"
+          tabIndex={-1}
+          aria-hidden="true"
+          min={first}
+          max={last}
+          value={selected}
+          onChange={(e) => e.target.value && go(e.target.value)}
+        />
+      </form>
+      <div className="chips daypicker-quick">
+        {QUICK_DAYS.map(([offset, label]) => {
+          const iso = addDays(todayDate, offset);
+          return (
+            <button
+              key={offset}
+              type="button"
+              className={`chip ${iso === selected ? "active" : ""}`}
+              disabled={!available.has(iso)}
+              onClick={() => go(iso)}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
-      <div className="daystrip" ref={strip} role="listbox" aria-label="Tag auswählen">
-        {days.map((d) => (
-          <button
-            key={d.date}
-            role="option"
-            aria-selected={d.date === selected}
-            className={`daychip ${d.kind} ${d.date === selected ? "active" : ""}`}
-            onClick={() => pick(d)}
-            title={d.kind === "forecast" ? "Prognose" : d.kind === "past" ? "Vergangener Tag" : "Aktueller Stand"}
-          >
-            {d.kind === "today" ? (
-              <strong>Heute</strong>
-            ) : (
-              <>
-                <span>{dayChip(d.date).weekday}</span>
-                <strong>{dayChip(d.date).date}</strong>
-              </>
-            )}
-          </button>
-        ))}
-      </div>
-      <p className="daylegend">
-        <i className="sw past" /> vergangen <i className="sw forecast" /> Prognose
-      </p>
+      {msg && (
+        <p className="msg" id="day-msg">
+          {msg}
+        </p>
+      )}
     </div>
   );
 }
