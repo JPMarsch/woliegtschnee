@@ -307,7 +307,7 @@ function DayPicker({ days, day, onChange }) {
 
   const [text, setText] = useState(toGerman(selected));
   const [msg, setMsg] = useState(null);
-  const calendar = useRef(null);
+  const [calOpen, setCalOpen] = useState(false);
 
   useEffect(() => {
     setText(toGerman(selected));
@@ -333,16 +333,6 @@ function DayPicker({ days, day, onChange }) {
     go(parseDate(text, Number(selected.slice(0, 4))));
   };
 
-  const openCalendar = () => {
-    const el = calendar.current;
-    if (!el) return;
-    try {
-      el.showPicker();
-    } catch {
-      el.focus();
-    }
-  };
-
   return (
     <div className="daypicker">
       <form className="daypicker-box" onSubmit={submit}>
@@ -358,20 +348,28 @@ function DayPicker({ days, day, onChange }) {
           onBlur={submit}
           aria-describedby={msg ? "day-msg" : undefined}
         />
-        <button type="button" className="daypicker-cal" onClick={openCalendar} aria-label="Kalender öffnen" title="Kalender">
+        <button
+          type="button"
+          className={`daypicker-cal ${calOpen ? "open" : ""}`}
+          onClick={() => setCalOpen((o) => !o)}
+          aria-label={calOpen ? "Kalender schließen" : "Kalender öffnen"}
+          aria-expanded={calOpen}
+          title="Kalender"
+        >
           📅
         </button>
-        <input
-          ref={calendar}
-          type="date"
-          className="daypicker-native"
-          tabIndex={-1}
-          aria-hidden="true"
-          min={first}
-          max={last}
-          value={selected}
-          onChange={(e) => e.target.value && go(e.target.value)}
-        />
+        {calOpen && (
+          <Calendar
+            available={available}
+            selected={selected}
+            todayDate={todayDate}
+            onPick={(iso) => {
+              setCalOpen(false);
+              go(iso);
+            }}
+            onClose={() => setCalOpen(false)}
+          />
+        )}
       </form>
       <div className="chips daypicker-quick">
         {QUICK_DAYS.map(([offset, label]) => {
@@ -394,6 +392,84 @@ function DayPicker({ days, day, onChange }) {
           {msg}
         </p>
       )}
+    </div>
+  );
+}
+
+const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+
+/** Eigener Monatskalender: nur Tage mit Daten sind wählbar. Schließt bei
+ *  Auswahl, Esc, ✕ oder Klick außerhalb. */
+function Calendar({ available, selected, todayDate, onPick, onClose }) {
+  const box = useRef(null);
+  const [view, setView] = useState(() => ({ y: +selected.slice(0, 4), m: +selected.slice(5, 7) - 1 }));
+  const dates = [...available.keys()];
+  const firstMonth = dates[0].slice(0, 7);
+  const lastMonth = dates[dates.length - 1].slice(0, 7);
+  const monthKey = `${view.y}-${String(view.m + 1).padStart(2, "0")}`;
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    const onDown = (e) => {
+      // Klick auf den 📅-Button erledigt dessen eigenes Toggle
+      if (box.current && !box.current.contains(e.target) && !e.target.closest?.(".daypicker-cal")) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [onClose]);
+
+  const shift = (n) =>
+    setView(({ y, m }) => {
+      const d = new Date(Date.UTC(y, m + n, 1));
+      return { y: d.getUTCFullYear(), m: d.getUTCMonth() };
+    });
+
+  const firstWeekday = (new Date(Date.UTC(view.y, view.m, 1)).getUTCDay() + 6) % 7; // Mo = 0
+  const daysInMonth = new Date(Date.UTC(view.y, view.m + 1, 0)).getUTCDate();
+  const cells = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  return (
+    <div className="calendar" ref={box} role="dialog" aria-label="Kalender">
+      <div className="calendar-head">
+        <button type="button" onClick={() => shift(-1)} disabled={monthKey <= firstMonth} aria-label="Vorheriger Monat">
+          ‹
+        </button>
+        <strong>
+          {MONTHS[view.m]} {view.y}
+        </strong>
+        <button type="button" onClick={() => shift(1)} disabled={monthKey >= lastMonth} aria-label="Nächster Monat">
+          ›
+        </button>
+        <button type="button" className="calendar-close" onClick={onClose} aria-label="Kalender schließen">
+          ✕
+        </button>
+      </div>
+      <div className="calendar-grid">
+        {WEEKDAYS.map((w) => (
+          <span key={w} className="calendar-wd">
+            {w}
+          </span>
+        ))}
+        {cells.map((d, i) => {
+          if (!d) return <span key={`e${i}`} />;
+          const iso = `${monthKey}-${String(d).padStart(2, "0")}`;
+          const entry = available.get(iso);
+          const cls = [entry?.kind, iso === selected && "active", iso === todayDate && "is-today"].filter(Boolean).join(" ");
+          return (
+            <button key={iso} type="button" className={cls} disabled={!entry} onClick={() => onPick(iso)}>
+              {d}
+            </button>
+          );
+        })}
+      </div>
+      <p className="daylegend">
+        <i className="sw past" /> vergangen <i className="sw forecast" /> Prognose
+      </p>
     </div>
   );
 }

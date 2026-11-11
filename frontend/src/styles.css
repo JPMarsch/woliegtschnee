@@ -342,17 +342,119 @@ input:focus-visible,
   border-color: var(--accent);
 }
 
-/* Nur als Kalender-Popup genutzt, nicht sichtbar */
-.daypicker-native {
+.daypicker-cal.open {
+  border-color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.calendar {
   position: absolute;
+  top: calc(100% + 6px);
   right: 0;
-  bottom: 0;
-  width: 42px;
-  height: 0;
-  padding: 0;
+  z-index: 1100;
+  width: 272px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.calendar-head strong {
+  flex: 1;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.calendar-head button {
+  width: 30px;
+  height: 30px;
   border: 0;
-  opacity: 0;
-  pointer-events: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.calendar-head button:hover:not(:disabled) {
+  background: var(--bg-soft);
+}
+
+.calendar-head button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.calendar-head .calendar-close {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.calendar-wd {
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 2px 0;
+}
+
+.calendar-grid button {
+  aspect-ratio: 1;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.calendar-grid button:disabled {
+  color: var(--muted);
+  opacity: 0.35;
+  cursor: default;
+}
+
+.calendar-grid button.past {
+  background: var(--bg-soft);
+}
+
+.calendar-grid button.forecast {
+  border: 1px dashed var(--accent);
+}
+
+.calendar-grid button.is-today {
+  font-weight: 700;
+  border: 1px solid var(--accent-strong);
+}
+
+.calendar-grid button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.calendar-grid button.active {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+.calendar .daylegend {
+  margin-top: 8px;
 }
 
 .chip:disabled {
@@ -656,4 +758,30 @@ a {
   .sub {
     margin-bottom: 10px;
   }
+}
+
+.daylegend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.daylegend .sw {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+.daylegend .sw.past {
+  background: var(--bg-soft);
+}
+
+.daylegend .sw.forecast {
+  margin-left: 8px;
+  border: 1px dashed var(--accent);
 }
