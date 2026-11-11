@@ -3,8 +3,9 @@ const nf1 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 });
 
 export const km = (v) => `${v < 10 ? nf1.format(v) : nf0.format(v)} km`;
 
-export const coords = (lat, lon) =>
-  `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? "O" : "W"}`;
+export const lat = (v) => `${Math.abs(v).toFixed(2)}° ${v >= 0 ? "N" : "S"}`;
+export const lon = (v) => `${Math.abs(v).toFixed(2)}° ${v >= 0 ? "O" : "W"}`;
+export const coords = (la, lo) => `${lat(la)}, ${lon(lo)}`;
 
 export const date = (iso) =>
   new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });

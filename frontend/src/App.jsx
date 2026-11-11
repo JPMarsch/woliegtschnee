@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDays, fetchNearest, fetchStatus, geocode } from "./api.js";
-import { coords, date, dateTime, km } from "./format.js";
+import { coords, date, dateTime, km, lat, lon } from "./format.js";
 import MapView from "./MapView.jsx";
 
 const PRESETS = [5, 10, 20, 50, 100];
@@ -160,7 +160,7 @@ export default function App() {
         </header>
 
         <DataBadge status={status} error={statusError} />
-        {days?.length > 1 && <DayPicker days={days} day={day} onChange={setDay} />}
+        <DayPicker days={days} day={day} onChange={setDay} />
 
         <section>
           <h2>1 · Startpunkt</h2>
@@ -228,7 +228,19 @@ export default function App() {
 
 function DataBadge({ status, error }) {
   if (error) return <div className="banner error">Schneedaten nicht verfügbar: {error}</div>;
-  if (!status) return <div className="banner muted">Lade Datenstand … (der Server startet ggf. erst, das kann bis zu einer Minute dauern)</div>;
+  if (!status)
+    return (
+      // Gleiche Form wie der fertige Datenstand, damit nichts springt
+      <div className="databadge loading-badge" title="Der Server startet ggf. erst – das kann bis zu einer Minute dauern.">
+        <span>Datenstand</span>
+        <strong>wird geladen …</strong>
+        <span className="info">
+          <button type="button" className="info-icon" disabled aria-hidden="true" tabIndex={-1}>
+            i
+          </button>
+        </span>
+      </div>
+    );
   const isGfs = /GFS/i.test(status.source);
   const when = isGfs ? dateTime(status.valid_time) : date(status.valid_time);
   const label = { past: "Schneelage am", forecast: "Prognose für" }[status.kind] ?? "Datenstand";
@@ -320,11 +332,15 @@ function isoFrom(y, mo, d) {
 
 /** Tagesauswahl: Datum eintippen oder im Kalender wählen, plus Schnellwahl. */
 function DayPicker({ days, day, onChange }) {
-  const todayDate = days.find((d) => d.kind === "today")?.date ?? new Date().toISOString().slice(0, 10);
+  // Wird schon angezeigt, während die Tage noch laden (dann deaktiviert),
+  // damit sich das Layout beim Laden nicht verschiebt.
+  const loading = !days?.length;
+  const list = days ?? [];
+  const todayDate = list.find((d) => d.kind === "today")?.date ?? (loading ? null : new Date().toISOString().slice(0, 10));
   const selected = day ?? todayDate;
-  const available = new Map(days.map((d) => [d.date, d]));
-  const first = days[0].date;
-  const last = days[days.length - 1].date;
+  const available = new Map(list.map((d) => [d.date, d]));
+  const first = list[0]?.date;
+  const last = list[list.length - 1]?.date;
 
   const [text, setText] = useState(toGerman(selected));
   const [msg, setMsg] = useState(null);
@@ -351,6 +367,7 @@ function DayPicker({ days, day, onChange }) {
 
   const submit = (e) => {
     e.preventDefault();
+    if (loading) return;
     go(parseDate(text, Number(selected.slice(0, 4))));
   };
 
@@ -363,7 +380,8 @@ function DayPicker({ days, day, onChange }) {
           type="text"
           inputMode="numeric"
           autoComplete="off"
-          placeholder="TT.MM.JJJJ"
+          placeholder={loading ? "Tage werden geladen …" : "TT.MM.JJJJ"}
+          disabled={loading}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={submit}
@@ -373,6 +391,7 @@ function DayPicker({ days, day, onChange }) {
           type="button"
           className={`daypicker-cal ${calOpen ? "open" : ""}`}
           onClick={() => setCalOpen((o) => !o)}
+          disabled={loading}
           aria-label={calOpen ? "Kalender schließen" : "Kalender öffnen"}
           aria-expanded={calOpen}
           title="Kalender"
@@ -583,8 +602,11 @@ function Result({ start, result, loading, error }) {
           <span className="big">{km(distance_km)}</span>
           <span className="label">Luftlinie</span>
         </div>
-        <div className="wide">
-          <span className="coord">{coords(snow.lat, snow.lon)}</span>
+        <div>
+          <span className="coord">
+            <span>{lat(snow.lat)}</span>
+            <span>{lon(snow.lon)}</span>
+          </span>
           <span className="label">Koordinaten</span>
         </div>
       </div>
