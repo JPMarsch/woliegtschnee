@@ -107,6 +107,11 @@ export default function App() {
 
   const [mapPick, setMapPick] = useState(false); // Startpunkt per Kartenklick wählen
 
+  // Version fürs Overlay direkt aus der Tagesliste – so lädt die Karte parallel
+  // zu Status und Suche, statt erst auf /api/status zu warten.
+  const dayEntry = days?.find((d) => (day ? d.date === day : d.kind === "today"));
+  const overlayVersion = dayEntry?.created_at ?? status?.created_at;
+
   const pickStart = useCallback((s) => {
     setStart(s);
     setMapPick(false);
@@ -134,7 +139,7 @@ export default function App() {
       <MapView
         start={start}
         result={result}
-        status={status}
+        overlayVersion={overlayVersion}
         day={day}
         showOverlay={showOverlay}
         picking={mapPick}

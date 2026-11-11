@@ -54,7 +54,7 @@ function FitView({ start, path }) {
   return null;
 }
 
-export default function MapView({ start, result, status, day, showOverlay, picking, onPick }) {
+export default function MapView({ start, result, overlayVersion, day, showOverlay, picking, onPick }) {
   const found = result?.found ? result : null;
 
   // Großkreis-Linie; Schneemarker und Zelle auf die „entfaltete“ Länge schieben,
@@ -74,8 +74,8 @@ export default function MapView({ start, result, status, day, showOverlay, picki
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {showOverlay && status && (
-        <ImageOverlay url={overlayUrl(status.created_at, day)} bounds={OVERLAY_BOUNDS} opacity={0.85} />
+      {showOverlay && overlayVersion && (
+        <ImageOverlay url={overlayUrl(overlayVersion, day)} bounds={OVERLAY_BOUNDS} opacity={0.85} />
       )}
       <ClickHandler active={picking} onPick={onPick} />
       <FitView start={start} path={path} />

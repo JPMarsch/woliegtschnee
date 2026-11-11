@@ -4,6 +4,8 @@ gebaute Frontend aus, sodass ein einzelner Dienst genügt."""
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from contextlib import asynccontextmanager
 from urllib.parse import urlencode
 
@@ -34,7 +36,19 @@ DISCLAIMER = (
 async def lifespan(_app: FastAPI):
     start_background_jobs()
     store.today.get()
+    if config.DATA_URL:
+        # Prognose + jüngste Tage regelmäßig vorab laden (neuer Index → neue Dateien)
+        threading.Thread(target=_prefetch_loop, daemon=True, name="Vorabladen").start()
     yield
+
+
+def _prefetch_loop():
+    while True:
+        try:
+            store.prefetch()
+        except Exception:
+            logging.getLogger(__name__).exception("Vorabladen fehlgeschlagen")
+        time.sleep(600)
 
 
 app = FastAPI(title="Wo liegt Schnee?", lifespan=lifespan)
@@ -68,7 +82,7 @@ def _require_index(day: str | None = None):
 @app.get("/api/days")
 def days():
     """Alle verfügbaren Tage: vergangen, heute, Prognose."""
-    fields = ("date", "kind", "valid_time", "run", "source")
+    fields = ("date", "kind", "valid_time", "run", "source", "created_at")
     return {"days": [{k: e.get(k) for k in fields} for e in store.days()]}
 
 

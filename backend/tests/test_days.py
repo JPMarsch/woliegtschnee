@@ -72,3 +72,18 @@ def test_remove_unlisted(tmp_path):
         (tmp_path / f"day-{d}.npz").write_bytes(b"x")
     days.remove_unlisted(tmp_path, [{"file": "day-2026-01-02.npz"}])
     assert sorted(p.name for p in tmp_path.iterdir()) == ["day-2026-01-02.npz"]
+
+
+def test_overlay_fallback_for_old_day_files(tmp_path):
+    """Tagesdateien aus der Zeit vor dem eingebetteten Overlay werden gerendert."""
+    import json
+
+    meta = _write_day(tmp_path / "new.npz", 30)
+    with np.load(tmp_path / "new.npz") as f:
+        np.savez_compressed(tmp_path / "day-2026-01-01.npz", depth_cm=f["depth_cm"], lat=f["lat"], lon=f["lon"],
+                            meta=np.array(json.dumps(meta)))
+    days.write_index(tmp_path, [days.entry(meta, "past", "day-2026-01-01.npz")])
+    store = DayStore(tmp_path)
+    entry = store.find("2026-01-01")
+    assert store.overlay_png(entry).startswith(b"\x89PNG")
+    assert store.index(entry).nearest(48, 11, 10).depth_cm == 30

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import os
 import threading
@@ -16,7 +15,7 @@ import numpy as np
 from . import config
 from .geo import haversine_km
 from .days import list_days
-from .grid import NODATA, load_dataset, load_day, render_overlay
+from .grid import NODATA, load_dataset, load_day, load_day_meta, load_day_overlay, overlay_png_bytes
 
 log = logging.getLogger(__name__)
 
@@ -136,20 +135,31 @@ class SnowStore:
         return self._index
 
 
+@dataclass
+class _LoadedDay:
+    created_at: str
+    index: SnowIndex
+    png: bytes | None
+    grid: tuple | None  # nur behalten, falls das PNG noch gerendert werden muss
+
+
 class DayStore:
     """Alle verfügbaren Tage. „Heute“ kommt aus den klassischen Dateien
     (SnowStore), jeder andere Tag wird erst bei Bedarf geladen – lokal oder,
     falls dort nicht (aktuell) vorhanden, von DATA_URL – und im Speicher
-    zwischengehalten (die letzten `max_loaded` Tage)."""
+    zwischengehalten (die letzten `max_loaded` Tage).
 
-    def __init__(self, data_dir: Path, data_url: str = "", max_loaded: int = 6):
+    Jeder Tag hat ein eigenes Lock: Status, Suche und Overlay für denselben Tag
+    warten aufeinander (die Datei wird nur einmal geladen), andere Tage nicht."""
+
+    def __init__(self, data_dir: Path, data_url: str = "", max_loaded: int = 12):
         self.data_dir = data_dir
         self.data_url = data_url
         self.max_loaded = max_loaded
         self.today = SnowStore(data_dir)
-        self._indexes: OrderedDict[str, tuple[str, SnowIndex]] = OrderedDict()
-        self._overlays: OrderedDict[str, tuple[str, bytes]] = OrderedDict()
-        self._lock = threading.Lock()
+        self._loaded: OrderedDict[str, _LoadedDay] = OrderedDict()
+        self._file_locks: dict[str, threading.Lock] = {}
+        self._lock = threading.Lock()  # schützt nur die beiden Dicts
 
     def days(self) -> list[dict]:
         return list_days(self.data_dir)
@@ -164,43 +174,70 @@ class DayStore:
     def index(self, entry: dict) -> SnowIndex | None:
         if not entry["file"]:
             return self.today.get()
-        with self._lock:
-            cached = self._indexes.get(entry["file"])
-            if cached and cached[0] == entry["created_at"]:
-                self._indexes.move_to_end(entry["file"])
-                return cached[1]
-            index = SnowIndex(*self._load(entry))
-            self._remember(self._indexes, entry, index)
-            return index
+        return self._get(entry).index
 
     def overlay_png(self, entry: dict) -> bytes:
+        day = self._get(entry)
+        if day.png is None:  # ältere Tagesdatei ohne eingebettetes Overlay
+            with self._file_lock(entry["file"]):
+                if day.png is None:
+                    day.png = overlay_png_bytes(*day.grid)
+                    day.grid = None
+        return day.png
+
+    def prefetch(self, past_days: int = 7) -> None:
+        """Prognose und die jüngsten vergangenen Tage schon auf die Platte holen,
+        damit der Tageswechsel dafür nicht auf GitHub warten muss."""
+        days = self.days()
+        past = [e for e in days if e["kind"] == "past"][-past_days:]
+        for entry in past + [e for e in days if e["kind"] == "forecast"]:
+            try:
+                with self._file_lock(entry["file"]):
+                    self._ensure_file(entry)
+            except Exception:
+                log.warning("Vorabladen von %s fehlgeschlagen", entry["file"], exc_info=True)
+
+    def _file_lock(self, name: str) -> threading.Lock:
         with self._lock:
-            cached = self._overlays.get(entry["file"])
-            if cached and cached[0] == entry["created_at"]:
-                self._overlays.move_to_end(entry["file"])
-                return cached[1]
-            depth_cm, lat, lon, _ = self._load(entry)
-            buf = io.BytesIO()
-            render_overlay(depth_cm, lat, lon).save(buf, format="PNG", optimize=True)
-            self._remember(self._overlays, entry, buf.getvalue())
-            return buf.getvalue()
+            return self._file_locks.setdefault(name, threading.Lock())
 
-    def _remember(self, cache: OrderedDict, entry: dict, value) -> None:
-        cache[entry["file"]] = (entry["created_at"], value)
-        cache.move_to_end(entry["file"])
-        while len(cache) > self.max_loaded:
-            cache.popitem(last=False)
+    def _get(self, entry: dict) -> _LoadedDay:
+        name = entry["file"]
+        with self._file_lock(name):
+            with self._lock:
+                cached = self._loaded.get(name)
+                if cached and cached.created_at == entry["created_at"]:
+                    self._loaded.move_to_end(name)
+                    return cached
+            path = self._ensure_file(entry)
+            depth_cm, lat, lon, meta = load_day(path)
+            png = load_day_overlay(path)
+            day = _LoadedDay(
+                created_at=entry["created_at"],
+                index=SnowIndex(depth_cm, lat, lon, meta),
+                png=png,
+                grid=None if png else (depth_cm, lat, lon),
+            )
+            with self._lock:
+                self._loaded[name] = day
+                self._loaded.move_to_end(name)
+                while len(self._loaded) > self.max_loaded:
+                    self._loaded.popitem(last=False)
+            return day
 
-    def _load(self, entry: dict):
+    def _ensure_file(self, entry: dict) -> Path:
+        """Lokale Datei passend zum Index – sonst von DATA_URL laden."""
         path = self.data_dir / entry["file"]
         if path.exists():
-            data = load_day(path)
-            if data[3].get("created_at") == entry["created_at"] or not self.data_url:
-                return data
+            try:
+                if load_day_meta(path).get("created_at") == entry["created_at"] or not self.data_url:
+                    return path
+            except Exception:
+                log.warning("Lokale Datei %s unlesbar, lade neu", path.name)
         if not self.data_url:
             raise FileNotFoundError(entry["file"])
         self._download(entry["file"], path)
-        return load_day(path)
+        return path
 
     def _download(self, name: str, path: Path) -> None:
         import httpx

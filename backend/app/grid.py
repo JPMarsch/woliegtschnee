@@ -11,6 +11,7 @@ PNG-Overlay in Web-Mercator für die Karte.
 
 from __future__ import annotations
 
+import io
 import json
 import math
 import os
@@ -113,13 +114,22 @@ def load_dataset(data_dir: Path):
 
 
 def save_day(path: Path, depth_cm: np.ndarray, lat: np.ndarray, lon: np.ndarray, **meta_kwargs) -> dict:
-    """Einen Tag als einzelne Datei speichern (Raster + Metadaten). Das Overlay
-    rendert der Server bei Bedarf selbst – so bleibt es eine Datei pro Tag."""
+    """Einen Tag als einzelne Datei speichern: Raster, Metadaten und das fertig
+    gerenderte Overlay-PNG – so muss der Server beim Tageswechsel nichts rechnen
+    und es bleibt trotzdem eine Datei pro Tag."""
     path.parent.mkdir(parents=True, exist_ok=True)
     depth_cm, lat, lon = normalize_lonlat(depth_cm, lat, lon)
     meta = make_meta(depth_cm, lon, **meta_kwargs)
+    png = overlay_png_bytes(depth_cm, lat, lon)
     tmp = path.with_name(path.name + ".tmp.npz")
-    np.savez_compressed(tmp, depth_cm=depth_cm, lat=lat, lon=lon, meta=np.array(json.dumps(meta)))
+    np.savez_compressed(
+        tmp,
+        depth_cm=depth_cm,
+        lat=lat,
+        lon=lon,
+        meta=np.array(json.dumps(meta)),
+        overlay_png=np.frombuffer(png, dtype=np.uint8),
+    )
     os.replace(tmp, path)
     return meta
 
@@ -127,6 +137,25 @@ def save_day(path: Path, depth_cm: np.ndarray, lat: np.ndarray, lon: np.ndarray,
 def load_day(path: Path):
     with np.load(path) as f:
         return f["depth_cm"], f["lat"], f["lon"], json.loads(str(f["meta"]))
+
+
+def load_day_meta(path: Path) -> dict:
+    """Nur die Metadaten lesen (npz lädt Einträge einzeln, das Raster bleibt liegen)."""
+    with np.load(path) as f:
+        return json.loads(str(f["meta"]))
+
+
+def load_day_overlay(path: Path) -> bytes | None:
+    """Eingebettetes Overlay-PNG, falls die Datei eines enthält (ältere nicht)."""
+    with np.load(path) as f:
+        return f["overlay_png"].tobytes() if "overlay_png" in f.files else None
+
+
+def overlay_png_bytes(depth_cm: np.ndarray, lat: np.ndarray, lon: np.ndarray) -> bytes:
+    # Ohne optimize=True: ~4× schneller, Datei nur ~1 % größer
+    buf = io.BytesIO()
+    render_overlay(depth_cm, lat, lon).save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def _nearest_index(axis: np.ndarray, values: np.ndarray) -> np.ndarray:
