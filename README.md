@@ -11,7 +11,8 @@ Eine Website, die weltweit das **nächstgelegene Gebiet mit einer frei wählbare
 - **Suche:** nächste Rasterzelle ≥ Grenzwert (Großkreisentfernung, ~10 ms bei Millionen Schneezellen)
 - **Ergebnis:** Schneehöhe, Koordinaten, Rasterzelle, Datenstand, Luftlinie (inkl. Großkreis-Linie auf der Karte)
 - **Auto:** Google-Maps-Route per URL (keine API nötig)
-- **Karte:** Schneedecken-Overlay mit Legende, teilbare Links (`?lat=…&lon=…&min=…`)
+- **Tagesauswahl:** alle gespeicherten vergangenen Tage, heute und 7 Tage Prognose (GFS); Datum auch per Kalender
+- **Karte:** Schneedecken-Overlay mit Legende, teilbare Links (`?lat=…&lon=…&min=…&day=…`)
 - **Kennzeichnung:** Demo-Daten und veraltete Daten (> 10 Tage) werden deutlich markiert
 - Optimiert für Smartphone (Bottom-Sheet) und Desktop, Hell/Dunkel-Modus
 
@@ -20,7 +21,8 @@ Eine Website, die weltweit das **nächstgelegene Gebiet mit einer frei wählbare
 ```
 backend/                 Python (FastAPI)
   app/
-    main.py              API: /api/status, /api/nearest, /api/geocode, /api/overlay.png
+    main.py              API: /api/days, /api/status, /api/nearest, /api/geocode, /api/overlay.png (jeweils ?day=YYYY-MM-DD)
+    days.py              Tagesindex days.json (vergangen / heute / Prognose)
     snowdata.py          Schneeindex + Suche nach der nächsten Zelle
     grid.py              Rasterformat (uint16-cm in .npz), Web-Mercator-Overlay
     gfs.py               Download + Verarbeitung NOAA GFS (aktuell, ohne Konto)
@@ -67,7 +69,15 @@ Kein Konto nötig:
 cd backend && .venv/bin/python -m scripts.ingest_gfs
 ```
 
-Der Import nimmt den jüngsten fertigen GFS-Lauf (00/06/12/18 UTC, verfügbar ca. 4 h danach), lädt über den NOMADS-Filter nur die Felder `SNOD` (Schneehöhe, m) und `LAND` (Land-See-Maske, ~1 MB) – Fallback: AWS Open Data per Byte-Range –, blendet Wasser und Meereis aus und speichert das Raster wie oben. Daten gelten nach 2 Tagen als veraltet. Eine vorhandene GRIB2-Datei: `--file datei.grib2 --cycle 2026-11-10T00`.
+Jeder Import erzeugt:
+
+- **heute** – Analyse des jüngsten Laufs (klassische Dateien `snow_grid.npz`, `snow_overlay.png`, `snow_meta.json`)
+- **Prognose** – die nächsten 7 Tage um 12 UTC aus demselben Lauf (`day-YYYY-MM-DD.npz`)
+- **vergangene Tage** – fehlende Tage der letzten 10 Tage als 12-UTC-Analyse. Schon vorhandene Tage bleiben erhalten, die Historie wächst also mit jedem Tag. Ältere Tage lassen sich nachladen: `--backfill 2025-11-01` (AWS-Archiv ab 2021) bzw. in der Action unter *Run workflow → backfill*.
+
+`days.json` listet alle Tage. Der Server synchronisiert nur den aktuellen Tag und diesen Index; einen anderen Tag lädt er erst, wenn jemand ihn auswählt (die letzten 6 bleiben im Speicher, das Overlay rendert er selbst).
+
+Der Import nimmt für „heute“ den jüngsten fertigen GFS-Lauf (00/06/12/18 UTC, verfügbar ca. 4 h danach), lädt über den NOMADS-Filter nur die Felder `SNOD` (Schneehöhe, m) und `LAND` (Land-See-Maske, ~1 MB) – Fallback: AWS Open Data per Byte-Range –, blendet Wasser und Meereis aus und speichert das Raster wie oben. Daten gelten nach 2 Tagen als veraltet. Eine vorhandene GRIB2-Datei: `--file datei.grib2 --cycle 2026-11-10T00`.
 
 ## Geprüfte Schneedaten (ERA5-Land) – optional
 
@@ -122,6 +132,7 @@ Eine eigene Domain wird später in Vercel hinterlegt.
 
 - **Modellwerte:** GFS-Zellen sind ~25 km, ERA5-Land-Zellen ~9 km groß; in Gebirgen liegen Gipfel und Täler in derselben Zelle, GFS unterschätzt dort oft. Gletscher und Eisschilde (Grönland, Antarktis) erscheinen mit sehr großen Schneehöhen.
 - **Verzögerung:** GFS ist wenige Stunden alt (veraltet ab 2 Tagen), ERA5-Land ~5 Tage (veraltet ab 10 Tagen).
+- **Historie im Release:** ein Asset pro Tag (~170 KB). GitHub erlaubt pro Release rund 1000 Assets, das reicht für gut 2½ Jahre – danach müsste die Historie z. B. auf mehrere Releases verteilt werden.
 - **Auto-Route:** Google Maps entscheidet selbst, ob eine Route existiert (z. B. nicht über Ozeane).
 
 ## Datenquellen & Lizenzen

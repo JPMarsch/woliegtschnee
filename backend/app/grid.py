@@ -54,10 +54,8 @@ def normalize_lonlat(depth_cm: np.ndarray, lat: np.ndarray, lon: np.ndarray):
     return depth_cm[:, order], np.asarray(lat, np.float32), np.asarray(lon[order], np.float32)
 
 
-def save_dataset(
-    out_dir: Path,
+def make_meta(
     depth_cm: np.ndarray,
-    lat: np.ndarray,
     lon: np.ndarray,
     *,
     source: str,
@@ -66,8 +64,29 @@ def save_dataset(
     note: str = "",
     extra: dict | None = None,
 ) -> dict:
-    """Raster, Overlay und Metadaten atomar schreiben. Die Metadatei kommt
-    zuletzt, damit der Server erst neu lädt, wenn alles vollständig ist."""
+    resolution = float(abs(lon[1] - lon[0])) if len(lon) > 1 else 0.0
+    return {
+        "source": source,
+        "demo": demo,
+        "valid_time": valid_time.astimezone(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "resolution_deg": round(resolution, 4),
+        "shape": list(depth_cm.shape),
+        "note": note,
+        **(extra or {}),
+    }
+
+
+def save_dataset(
+    out_dir: Path,
+    depth_cm: np.ndarray,
+    lat: np.ndarray,
+    lon: np.ndarray,
+    **meta_kwargs,
+) -> dict:
+    """Aktuellen Datensatz (Raster, Overlay, Metadaten) atomar schreiben. Die
+    Metadatei kommt zuletzt, damit der Server erst neu lädt, wenn alles
+    vollständig ist."""
     out_dir.mkdir(parents=True, exist_ok=True)
     depth_cm, lat, lon = normalize_lonlat(depth_cm, lat, lon)
 
@@ -79,17 +98,7 @@ def save_dataset(
     render_overlay(depth_cm, lat, lon).save(tmp_png, format="PNG", optimize=True)
     os.replace(tmp_png, out_dir / config.OVERLAY_FILE)
 
-    resolution = float(abs(lon[1] - lon[0])) if len(lon) > 1 else 0.0
-    meta = {
-        "source": source,
-        "demo": demo,
-        "valid_time": valid_time.astimezone(timezone.utc).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "resolution_deg": round(resolution, 4),
-        "shape": list(depth_cm.shape),
-        "note": note,
-        **(extra or {}),
-    }
+    meta = make_meta(depth_cm, lon, **meta_kwargs)
     tmp_meta = out_dir / (config.META_FILE + ".tmp")
     tmp_meta.write_text(json.dumps(meta, indent=2))
     os.replace(tmp_meta, out_dir / config.META_FILE)
@@ -101,6 +110,23 @@ def load_dataset(data_dir: Path):
         depth_cm, lat, lon = f["depth_cm"], f["lat"], f["lon"]
     meta = json.loads((data_dir / config.META_FILE).read_text())
     return depth_cm, lat, lon, meta
+
+
+def save_day(path: Path, depth_cm: np.ndarray, lat: np.ndarray, lon: np.ndarray, **meta_kwargs) -> dict:
+    """Einen Tag als einzelne Datei speichern (Raster + Metadaten). Das Overlay
+    rendert der Server bei Bedarf selbst – so bleibt es eine Datei pro Tag."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    depth_cm, lat, lon = normalize_lonlat(depth_cm, lat, lon)
+    meta = make_meta(depth_cm, lon, **meta_kwargs)
+    tmp = path.with_name(path.name + ".tmp.npz")
+    np.savez_compressed(tmp, depth_cm=depth_cm, lat=lat, lon=lon, meta=np.array(json.dumps(meta)))
+    os.replace(tmp, path)
+    return meta
+
+
+def load_day(path: Path):
+    with np.load(path) as f:
+        return f["depth_cm"], f["lat"], f["lon"], json.loads(str(f["meta"]))
 
 
 def _nearest_index(axis: np.ndarray, values: np.ndarray) -> np.ndarray:

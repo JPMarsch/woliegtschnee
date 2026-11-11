@@ -10,17 +10,18 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .geocode import geocode
-from .snowdata import SnowStore
+from .snowdata import DayStore
 from .sync import start_background_jobs
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-store = SnowStore(config.DATA_DIR)
+store = DayStore(config.DATA_DIR, config.DATA_URL)
+DAY = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Tag (YYYY-MM-DD), Standard: aktuell")
 
 DISCLAIMER = (
     "Die Schneehöhen stammen aus dem Reanalyse-Modell ERA5-Land und sind modellierte "
@@ -32,7 +33,7 @@ DISCLAIMER = (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     start_background_jobs()
-    store.get()
+    store.today.get()
     yield
 
 
@@ -45,16 +46,35 @@ def _disclaimer(index) -> str:
     return index.meta.get("disclaimer") or DISCLAIMER
 
 
-def _require_index():
-    index = store.get()
+def _entry(day: str | None) -> dict:
+    entry = store.find(day)
+    if entry is None:
+        raise HTTPException(404, f"Für den {day} gibt es keine Schneedaten.")
+    return entry
+
+
+def _require_index(day: str | None = None):
+    entry = _entry(day)
+    try:
+        index = store.index(entry)
+    except Exception as exc:
+        logging.getLogger(__name__).exception("Tag %s konnte nicht geladen werden", day)
+        raise HTTPException(503, f"Schneedaten für den {day} sind gerade nicht abrufbar.") from exc
     if index is None:
         raise HTTPException(503, "Noch keine Schneedaten vorhanden. Bitte Import ausführen.")
     return index
 
 
+@app.get("/api/days")
+def days():
+    """Alle verfügbaren Tage: vergangen, heute, Prognose."""
+    fields = ("date", "kind", "valid_time", "run", "source")
+    return {"days": [{k: e.get(k) for k in fields} for e in store.days()]}
+
+
 @app.get("/api/status")
-def status():
-    index = _require_index()
+def status(day: str | None = DAY):
+    index = _require_index(day)
     return {**index.status(), "disclaimer": _disclaimer(index)}
 
 
@@ -63,8 +83,9 @@ def nearest(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
     min_cm: int = Query(10, ge=1, le=5000),
+    day: str | None = DAY,
 ):
-    index = _require_index()
+    index = _require_index(day)
     hit = index.nearest(lat, lon, min_cm)
     data_status = index.status()
     if hit is None:
@@ -111,7 +132,14 @@ async def api_geocode(q: str = Query(..., min_length=2, max_length=200), lang: s
 
 
 @app.get("/api/overlay.png")
-def overlay():
+def overlay(day: str | None = DAY):
+    entry = _entry(day)
+    if entry["file"]:
+        try:
+            png = store.overlay_png(entry)
+        except Exception as exc:
+            raise HTTPException(503, "Overlay für diesen Tag nicht abrufbar") from exc
+        return Response(png, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
     path = config.DATA_DIR / config.OVERLAY_FILE
     if not path.exists():
         raise HTTPException(404, "Kein Overlay vorhanden")

@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 
 from app import config
+from app.days import fetch_remote_index, read_index
 from app.era5 import ingest_latest, process_file
 
 
@@ -26,7 +27,8 @@ def main():
             parser.error("--file braucht --date")
         meta = process_file(args.file, args.date, args.out)
     else:
-        meta = ingest_latest(args.out)
+        previous = fetch_remote_index(config.DATA_URL) if config.DATA_URL else read_index(args.out)
+        meta = ingest_latest(args.out, previous=previous)
     print(f"OK – Datenstand {meta['valid_time']}, Raster {meta['shape']}")
 
 

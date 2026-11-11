@@ -9,6 +9,15 @@ export const coords = (lat, lon) =>
 export const date = (iso) =>
   new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 
+const weekdayFmt = new Intl.DateTimeFormat("de-DE", { weekday: "short", timeZone: "UTC" });
+const dayMonthFmt = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "numeric", timeZone: "UTC" });
+
+/** "2026-11-08" → { weekday: "Sa", date: "8.11." } für die Tagesauswahl */
+export const dayChip = (isoDate) => {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  return { weekday: weekdayFmt.format(d).replace(".", ""), date: dayMonthFmt.format(d) };
+};
+
 export const dateTime = (iso) =>
   new Date(iso).toLocaleString("de-DE", {
     day: "2-digit",

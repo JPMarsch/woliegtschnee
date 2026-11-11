@@ -10,6 +10,8 @@ FRONTEND_DIST = Path(os.environ.get("FRONTEND_DIST", BACKEND_DIR.parent / "front
 GRID_FILE = "snow_grid.npz"
 META_FILE = "snow_meta.json"
 OVERLAY_FILE = "snow_overlay.png"
+# Index aller verfügbaren Tage (vergangen / aktuell / Prognose).
+DAYS_FILE = "days.json"
 
 # Ab wie vielen Tagen Alter der Datenstand als veraltet gilt.
 # Gilt für Daten ohne eigene Grenze in den Metadaten (GFS bringt 2 Tage mit).

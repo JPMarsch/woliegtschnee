@@ -1,5 +1,5 @@
 # Render Blueprint – Backend als kostenloser Python-Web-Service.
-# Frontend läuft auf Vercel, der tägliche ERA5-Import über GitHub Actions.
+# Frontend läuft auf Vercel, der GFS-Import (alle 6 h) über GitHub Actions.
 services:
   - type: web
     name: woliegtschnee-api
@@ -16,6 +16,6 @@ services:
       - key: DATA_URL
         value: https://github.com/JPMarsch/woliegtschnee/releases/download/snow-data
       - key: DATA_SYNC_HOURS
-        value: "3"
+        value: "1"
       - key: NOMINATIM_USER_AGENT
         sync: false

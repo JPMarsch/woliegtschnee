@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from app import config
+from app.days import entry, remove_unlisted, write_index
 from app.grid import NODATA, save_dataset
 
 STEP = 0.1
@@ -77,8 +78,11 @@ def main():
         source="DEMO (synthetische Werte)",
         valid_time=valid_time,
         demo=True,
-        note="Erfundene Testdaten – für echte Werte scripts/ingest_era5.py ausführen.",
+        note="Erfundene Testdaten – für echte Werte scripts/ingest_gfs.py ausführen.",
+        extra={"kind": "today"},
     )
+    write_index(config.DATA_DIR, [entry(meta, "today", "")])
+    remove_unlisted(config.DATA_DIR, [])
     print(f"Demo-Daten geschrieben: {meta}")
 
 

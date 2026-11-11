@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchNearest, fetchStatus, geocode } from "./api.js";
-import { coords, date, dateTime, km } from "./format.js";
+import { fetchDays, fetchNearest, fetchStatus, geocode } from "./api.js";
+import { coords, date, dateTime, dayChip, km } from "./format.js";
 import MapView from "./MapView.jsx";
 
 const PRESETS = [5, 10, 20, 50, 100];
@@ -19,10 +19,12 @@ function readUrl() {
   const lat = parseFloat(p.get("lat"));
   const lon = parseFloat(p.get("lon"));
   const min = parseInt(p.get("min"), 10);
+  const day = p.get("day");
   const valid = Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
   return {
     start: valid ? { lat, lon, label: p.get("label") || "Geteilter Startpunkt" } : null,
     minCm: min >= 1 ? Math.min(min, 5000) : 10,
+    day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : null,
   };
 }
 
@@ -37,19 +39,24 @@ export default function App() {
   const [error, setError] = useState(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
-  const isGfs = /GFS/i.test(status?.source ?? "");
+  const [days, setDays] = useState(null);
+  const [day, setDay] = useState(initial.day); // null = aktueller Stand
 
   useEffect(() => {
     // Render Free schläft bei Inaktivität; das Aufwachen dauert bis ~1 Minute.
     let cancelled = false;
     const load = async (attempt = 1) => {
       try {
-        const s = await fetchStatus();
-        if (!cancelled) setStatus(s);
+        const { days } = await fetchDays();
+        if (cancelled) return;
+        setDays(days);
+        // Geteilter Link mit einem Tag, den es (nicht mehr) gibt → aktueller Stand
+        setDay((d) => (d && days.some((x) => x.date === d && x.kind !== "today") ? d : null));
       } catch (e) {
         if (cancelled) return;
         if (attempt < 6) setTimeout(() => load(attempt + 1), 5000);
-        else setStatusError(e.message);
+        // Ohne Tagesliste (z. B. älteres Backend) trotzdem den aktuellen Stand laden
+        else setDays([]);
       }
     };
     load();
@@ -57,6 +64,18 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!days) return;
+    let cancelled = false;
+    setStatusError(null);
+    fetchStatus(day)
+      .then((s) => !cancelled && setStatus(s))
+      .catch((e) => !cancelled && setStatusError(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [days, day]);
 
   // Suche automatisch, sobald Startpunkt oder Mindesthöhe sich ändern.
   const requestId = useRef(0);
@@ -66,13 +85,13 @@ export default function App() {
     const timer = setTimeout(() => {
       setLoading(true);
       setError(null);
-      fetchNearest(start.lat, start.lon, minCm)
+      fetchNearest(start.lat, start.lon, minCm, day)
         .then((r) => id === requestId.current && setResult(r))
         .catch((e) => id === requestId.current && setError(e.message))
         .finally(() => id === requestId.current && setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [start, minCm]);
+  }, [start, minCm, day]);
 
   useEffect(() => {
     const p = new URLSearchParams();
@@ -82,8 +101,9 @@ export default function App() {
       p.set("label", start.label);
     }
     if (minCm >= 1) p.set("min", minCm);
+    if (day) p.set("day", day);
     window.history.replaceState(null, "", `${window.location.pathname}?${p}`);
-  }, [start, minCm]);
+  }, [start, minCm, day]);
 
   const pickStart = useCallback((s) => {
     setStart(s);
@@ -92,7 +112,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <MapView start={start} result={result} status={status} showOverlay={showOverlay} onPick={pickStart} />
+      <MapView start={start} result={result} status={status} day={day} showOverlay={showOverlay} onPick={pickStart} />
 
       <aside className={`panel ${collapsed ? "collapsed" : ""}`}>
         <button className="grip" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? "Panel ausklappen" : "Panel einklappen"}>
@@ -105,6 +125,7 @@ export default function App() {
         </header>
 
         <DataBadge status={status} error={statusError} />
+        {days?.length > 1 && <DayPicker days={days} day={day} onChange={setDay} />}
 
         <section>
           <h2>1 · Startpunkt</h2>
@@ -164,39 +185,6 @@ export default function App() {
               <span className="unit">cm</span>
             </div>
           )}
-          <span className="info">
-            <button type="button" className="info-icon" aria-label="Hinweis zu den Daten" aria-describedby="data-hint">
-              i
-            </button>
-            <span className="info-tip" role="tooltip" id="data-hint">
-              {isGfs ? (
-                <>
-                  Die Schneehöhen stammen aus dem Wettermodell{" "}
-                  <a href="https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast" target="_blank" rel="noreferrer">
-                    NOAA GFS
-                  </a>{" "}
-                  (Analyse des jüngsten Modelllaufs, alle 6 Stunden neu). Es sind modellierte Mittelwerte für
-                  Rasterzellen von ca. 25 × 25 km, keine Messungen an einem bestimmten Ort.
-                </>
-              ) : (
-                <>
-                  Die Schneehöhen stammen aus dem Reanalyse-Modell{" "}
-                  <a href="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land" target="_blank" rel="noreferrer">
-                    Copernicus ERA5-Land
-                  </a>
-                  . Es sind modellierte Mittelwerte für Rasterzellen von ca. 9 × 9 km, keine Messungen an einem
-                  bestimmten Ort.
-                </>
-              )}{" "}
-              Vor Ort kann die Schneelage deutlich abweichen – besonders in steilem Gelände.
-            </span>
-          </span>
-          <p className="credits">
-            {isGfs
-              ? "Schneedaten: NOAA/NCEP Global Forecast System."
-              : "Enthält modifizierte Copernicus-Climate-Change-Service-Informationen."}{" "}
-            Adresssuche & Karte: © OpenStreetMap-Mitwirkende.
-          </p>
         </footer>
       </aside>
     </div>
@@ -206,12 +194,15 @@ export default function App() {
 function DataBadge({ status, error }) {
   if (error) return <div className="banner error">Schneedaten nicht verfügbar: {error}</div>;
   if (!status) return <div className="banner muted">Lade Datenstand … (der Server startet ggf. erst, das kann bis zu einer Minute dauern)</div>;
+  const isGfs = /GFS/i.test(status.source);
+  const when = isGfs ? dateTime(status.valid_time) : date(status.valid_time);
+  const label = { past: "Schneelage am", forecast: "Prognose für" }[status.kind] ?? "Datenstand";
   return (
     <>
-      <div className="databadge" title={`Erzeugt: ${dateTime(status.created_at)}`}>
-        <span>Datenstand</span>
-        <strong>{/GFS/i.test(status.source) ? dateTime(status.valid_time) : date(status.valid_time)}</strong>
-        <span className="src">{status.source}</span>
+      <div className={`databadge ${status.kind ?? ""}`}>
+        <span>{label}</span>
+        <strong>{when}</strong>
+        <SourceInfo status={status} isGfs={isGfs} />
       </div>
       {status.demo && (
         <div className="banner warn">
@@ -226,6 +217,113 @@ function DataBadge({ status, error }) {
         </div>
       )}
     </>
+  );
+}
+
+/** Datenquelle als Hover-Hinweis (öffnet auch per Tippen/Tastatur). */
+function SourceInfo({ status, isGfs }) {
+  return (
+    <span className="info below">
+      <button type="button" className="info-icon" aria-label="Hinweis zur Datenquelle" aria-describedby="data-hint">
+        i
+      </button>
+      <span className="info-tip" role="tooltip" id="data-hint">
+        <strong className="tip-src">{status.source}</strong>
+        {status.kind === "forecast" && status.run && <span className="tip-run">Modelllauf: {dateTime(status.run)}</span>}
+        {isGfs ? (
+          <>
+            Die Schneehöhen stammen aus dem Wettermodell{" "}
+            <a href="https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast" target="_blank" rel="noreferrer">
+              NOAA GFS
+            </a>
+            {status.kind === "forecast"
+              ? " – als Prognose, also umso unsicherer, je weiter sie in der Zukunft liegt."
+              : " (Analyse des Modelllaufs, alle 6 Stunden neu)."}{" "}
+            Es sind modellierte Mittelwerte für Rasterzellen von ca. 25 × 25 km, keine Messungen an einem bestimmten
+            Ort.
+          </>
+        ) : (
+          <>
+            Die Schneehöhen stammen aus dem Reanalyse-Modell{" "}
+            <a href="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-land" target="_blank" rel="noreferrer">
+              Copernicus ERA5-Land
+            </a>
+            . Es sind modellierte Mittelwerte für Rasterzellen von ca. 9 × 9 km, keine Messungen an einem bestimmten
+            Ort.
+          </>
+        )}{" "}
+        Vor Ort kann die Schneelage deutlich abweichen – besonders in steilem Gelände.
+        <span className="tip-credits">
+          {isGfs
+            ? "Schneedaten: NOAA/NCEP Global Forecast System."
+            : "Enthält modifizierte Copernicus-Climate-Change-Service-Informationen."}{" "}
+          Adresssuche & Karte: © OpenStreetMap-Mitwirkende.
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/** Tagesauswahl: vergangene Tage, heute, Prognose (waagrecht scrollbar). */
+function DayPicker({ days, day, onChange }) {
+  const strip = useRef(null);
+  const todayDate = days.find((d) => d.kind === "today")?.date;
+  const selected = day ?? todayDate;
+  const past = days.filter((d) => d.kind === "past");
+
+  // Ausgewählten Tag in den sichtbaren Bereich scrollen
+  useEffect(() => {
+    const el = strip.current?.querySelector(".active");
+    if (el) el.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [selected]);
+
+  const pick = (d) => onChange(d.kind === "today" ? null : d.date);
+  const jump = (value) => {
+    const d = days.find((x) => x.date === value);
+    if (d) pick(d);
+  };
+
+  return (
+    <div className="daypicker">
+      <div className="daypicker-head">
+        <span>Tag</span>
+        {past.length > 7 && (
+          <input
+            type="date"
+            className="daypicker-date"
+            min={days[0].date}
+            max={days[days.length - 1].date}
+            value={selected ?? ""}
+            onChange={(e) => jump(e.target.value)}
+            aria-label="Datum wählen"
+          />
+        )}
+      </div>
+      <div className="daystrip" ref={strip} role="listbox" aria-label="Tag auswählen">
+        {days.map((d) => (
+          <button
+            key={d.date}
+            role="option"
+            aria-selected={d.date === selected}
+            className={`daychip ${d.kind} ${d.date === selected ? "active" : ""}`}
+            onClick={() => pick(d)}
+            title={d.kind === "forecast" ? "Prognose" : d.kind === "past" ? "Vergangener Tag" : "Aktueller Stand"}
+          >
+            {d.kind === "today" ? (
+              <strong>Heute</strong>
+            ) : (
+              <>
+                <span>{dayChip(d.date).weekday}</span>
+                <strong>{dayChip(d.date).date}</strong>
+              </>
+            )}
+          </button>
+        ))}
+      </div>
+      <p className="daylegend">
+        <i className="sw past" /> vergangen <i className="sw forecast" /> Prognose
+      </p>
+    </div>
   );
 }
 
@@ -312,7 +410,7 @@ function Result({ start, result, loading, error }) {
   if (!result.found)
     return (
       <div className={`banner warn ${loading ? "loading" : ""}`}>
-        Weltweit gibt es laut aktuellem Datenstand keine Rasterzelle mit mindestens {result.min_cm} cm Schnee
+        Weltweit gibt es an diesem Tag keine Rasterzelle mit mindestens {result.min_cm} cm Schnee
         (Maximum: {result.max_depth_cm} cm).
       </div>
     );
@@ -330,23 +428,11 @@ function Result({ start, result, loading, error }) {
           <span className="big">{km(distance_km)}</span>
           <span className="label">Luftlinie</span>
         </div>
+        <div className="wide">
+          <span className="coord">{coords(snow.lat, snow.lon)}</span>
+          <span className="label">Koordinaten</span>
+        </div>
       </div>
-      <dl className="facts">
-        <dt>Koordinaten</dt>
-        <dd>{coords(snow.lat, snow.lon)}</dd>
-        <dt>Rasterzelle</dt>
-        <dd>
-          {snow.resolution_deg}° × {snow.resolution_deg}° (≈ {Math.round(snow.resolution_deg * 111)} km)
-        </dd>
-        <dt>Datenstand</dt>
-        <dd>
-          {dateTime(result.data.valid_time)}
-          {result.data.stale && <span className="tag warn">veraltet</span>}
-          {result.data.demo && <span className="tag warn">Demo</span>}
-        </dd>
-        <dt>Gesucht</dt>
-        <dd>≥ {result.min_cm} cm</dd>
-      </dl>
 
       <h3>🚗 Mit dem Auto</h3>
       <a className="btn primary block" href={car.google_maps_url} target="_blank" rel="noreferrer">

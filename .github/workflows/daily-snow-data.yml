@@ -11,6 +11,10 @@ on:
         type: choice
         options: [gfs, era5]
         default: gfs
+      backfill:
+        description: "Nur GFS: zusätzlich alle Tage ab diesem Datum nachladen (YYYY-MM-DD, Archiv ab 2021), leer = nur Lücken der letzten 10 Tage"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -22,7 +26,10 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 120   # CDS-Warteschlange (ERA5) kann dauern
+    timeout-minutes: 240   # CDS-Warteschlange (ERA5) bzw. großer Backfill
+    env:
+      # Bisheriger Tagesindex kommt aus dem Release, damit vorhandene Tage bleiben.
+      DATA_URL: https://github.com/${{ github.repository }}/releases/download/snow-data
     defaults:
       run:
         working-directory: backend
@@ -37,7 +44,9 @@ jobs:
 
       - name: NOAA GFS importieren
         if: ${{ (inputs.source || 'gfs') == 'gfs' }}
-        run: python -m scripts.ingest_gfs
+        env:
+          BACKFILL: ${{ inputs.backfill }}
+        run: python -m scripts.ingest_gfs ${BACKFILL:+--backfill "$BACKFILL"}
 
       - name: ERA5-Land importieren
         if: ${{ inputs.source == 'era5' }}
@@ -47,11 +56,23 @@ jobs:
         run: python -m scripts.ingest_era5
 
       - name: Als Release „snow-data“ veröffentlichen
+        working-directory: backend/data
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          shopt -s nullglob
           gh release view snow-data >/dev/null 2>&1 || \
-            gh release create snow-data --title "Aktuelle Schneedaten" --notes "Wird automatisch aktualisiert." --latest=false
-          # Metadatei zuletzt hochladen, da der Server daran neue Daten erkennt.
-          gh release upload snow-data data/snow_grid.npz data/snow_overlay.png --clobber
-          gh release upload snow-data data/snow_meta.json --clobber
+            gh release create snow-data --title "Schneedaten" --notes "Wird automatisch aktualisiert." --latest=false
+          # Nur neu erzeugte Dateien hochladen; vergangene Tage liegen schon im Release.
+          # Reihenfolge: Tagesdateien und Raster → Metadatei → days.json (daran erkennt der Server Neues).
+          files=(day-*.npz snow_grid.npz snow_overlay.png)
+          [ ${#files[@]} -gt 0 ] && gh release upload snow-data "${files[@]}" --clobber
+          gh release upload snow-data snow_meta.json --clobber
+          gh release upload snow-data days.json --clobber
+          # Tagesdateien entfernen, die nicht mehr im Index stehen (z. B. alte Prognosen)
+          keep=$(python3 -c "import json; print(' '.join(e['file'] for e in json.load(open('days.json'))['days'] if e['file']))")
+          for asset in $(gh release view snow-data --json assets --jq '.assets[].name'); do
+            case "$asset" in
+              day-*.npz) [[ " $keep " == *" $asset "* ]] || gh release delete-asset snow-data "$asset" -y ;;
+            esac
+          done

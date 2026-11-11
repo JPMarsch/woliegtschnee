@@ -16,8 +16,13 @@ async function getJson(path, params) {
   return res.json();
 }
 
-export const fetchStatus = () => getJson("/api/status");
-export const fetchNearest = (lat, lon, minCm) =>
-  getJson("/api/nearest", { lat: lat.toFixed(5), lon: lon.toFixed(5), min_cm: minCm });
+// day: "YYYY-MM-DD" oder null (= aktueller Stand)
+const withDay = (params, day) => (day ? { ...params, day } : params);
+
+export const fetchDays = () => getJson("/api/days");
+export const fetchStatus = (day) => getJson("/api/status", day ? { day } : undefined);
+export const fetchNearest = (lat, lon, minCm, day) =>
+  getJson("/api/nearest", withDay({ lat: lat.toFixed(5), lon: lon.toFixed(5), min_cm: minCm }, day));
 export const geocode = (q) => getJson("/api/geocode", { q });
-export const overlayUrl = (version) => `${API_BASE}/api/overlay.png?v=${encodeURIComponent(version)}`;
+export const overlayUrl = (version, day) =>
+  `${API_BASE}/api/overlay.png?${new URLSearchParams(withDay({ v: version }, day))}`;

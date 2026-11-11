@@ -285,9 +285,138 @@ input:focus-visible,
   color: var(--muted);
 }
 
-.databadge .src {
-  flex-basis: 100%;
-  font-size: 0.78rem;
+.databadge strong {
+  white-space: nowrap;
+}
+
+.databadge .info {
+  margin: 0 0 0 auto;
+  align-self: center;
+}
+
+.databadge.past {
+  background: color-mix(in srgb, var(--muted) 12%, var(--bg));
+}
+
+
+/* ---------- Tagesauswahl ---------- */
+.daypicker {
+  margin: -2px 0 12px;
+}
+
+.daypicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.daypicker-date {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.daystrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding: 2px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.daychip {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 46px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.daychip span {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.daychip.past {
+  background: var(--bg-soft);
+}
+
+.daychip.forecast {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.daychip.today {
+  border-color: var(--accent-strong);
+}
+
+.daychip:hover {
+  border-color: var(--accent);
+}
+
+.daychip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.daychip.active {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  border-style: solid;
+  color: #fff;
+}
+
+.daychip.active span {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.daylegend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.daylegend .sw {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+.daylegend .sw.past {
+  background: var(--bg-soft);
+}
+
+.daylegend .sw.forecast {
+  margin-left: 8px;
+  border: 1px dashed var(--accent);
 }
 
 .banner {
@@ -365,20 +494,15 @@ input:focus-visible,
   color: var(--muted);
 }
 
-.facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 12px;
-  font-size: 0.85rem;
-  margin: 12px 0 0;
+.stats > .wide {
+  grid-column: 1 / -1;
 }
 
-.facts dt {
-  color: var(--muted);
-}
-
-.facts dd {
-  margin: 0;
+.coord {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
 }
 
 
@@ -480,6 +604,38 @@ footer {
   height: 10px;
 }
 
+/* Variante unterhalb, rechtsbündig (für den Datenstand oben im Panel) */
+.info.below .info-tip {
+  left: auto;
+  right: -4px;
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform: translateY(-4px);
+}
+
+.info.below .info-tip::after {
+  top: auto;
+  bottom: 100%;
+}
+
+.tip-src {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.tip-run {
+  display: block;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.tip-credits {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
 .info:hover .info-tip,
 .info:focus-within .info-tip {
   opacity: 1;
@@ -487,11 +643,6 @@ footer {
   transform: none;
 }
 
-.credits {
-  font-size: 0.7rem;
-  color: var(--muted);
-  margin: 0;
-}
 
 a {
   color: var(--accent);

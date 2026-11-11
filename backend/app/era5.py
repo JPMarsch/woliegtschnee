@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 
 from . import config
+from . import days as days_index
 from .grid import meters_to_cm, save_dataset
 
 log = logging.getLogger(__name__)
@@ -73,11 +74,18 @@ def process_file(nc_path: Path, day: date, out_dir: Path = config.DATA_DIR) -> d
         source="Copernicus ERA5-Land (snow_depth)",
         valid_time=valid_time,
         note="Modellierte Rasterwerte (ca. 9 km), keine Punktmessungen.",
+        extra={"kind": "today"},
     )
 
 
-def ingest_latest(out_dir: Path = config.DATA_DIR, max_lag_days: int = 14, min_lag_days: int = 4) -> dict:
-    """Lädt den jüngsten verfügbaren Tag und schreibt das verarbeitete Raster."""
+def ingest_latest(
+    out_dir: Path = config.DATA_DIR,
+    max_lag_days: int = 14,
+    min_lag_days: int = 4,
+    previous: dict | None = None,
+) -> dict:
+    """Lädt den jüngsten verfügbaren Tag, schreibt das Raster als „heute“ und
+    aktualisiert days.json (vergangene Tage aus `previous` bleiben erhalten)."""
     today = datetime.now(timezone.utc).date()
     last_error: Exception | None = None
     with tempfile.TemporaryDirectory() as tmp:
@@ -93,5 +101,6 @@ def ingest_latest(out_dir: Path = config.DATA_DIR, max_lag_days: int = 14, min_l
                 continue
             meta = process_file(target, day, out_dir)
             log.info("Fertig: Datenstand %s", meta["valid_time"])
+            days_index.write_index(out_dir, days_index.merge(previous, [days_index.entry(meta, "today", "")]))
             return meta
     raise RuntimeError(f"Kein ERA5-Land-Tag verfügbar (letzter Fehler: {last_error})")

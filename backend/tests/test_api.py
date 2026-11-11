@@ -62,3 +62,10 @@ def test_impossible_threshold(client):
 
 def test_invalid_coordinates(client):
     assert client.get("/api/nearest", params={"lat": 100, "lon": 0}).status_code == 422
+
+
+def test_days_and_unknown_day(client):
+    days = client.get("/api/days").json()["days"]
+    assert any(d["kind"] == "today" for d in days)
+    assert client.get("/api/status", params={"day": "1999-01-01"}).status_code == 404
+    assert client.get("/api/nearest", params={"lat": 0, "lon": 0, "day": "nope"}).status_code == 422

@@ -10,6 +10,9 @@ frontend/dist/
 
 # Erzeugte Schneedaten (täglich neu)
 backend/data/snow_*
+backend/data/day-*
+backend/data/days.json
+*.grib2
 *.nc
 *.tmp*
 *.download
