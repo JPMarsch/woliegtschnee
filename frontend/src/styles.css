@@ -594,9 +594,9 @@ input:focus-visible,
 .coord {
   display: flex;
   flex-direction: column;
-  font-size: 0.9rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.15;
   color: var(--accent-strong);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

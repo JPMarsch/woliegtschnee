@@ -596,7 +596,7 @@ function Result({ start, result, loading, error }) {
       <div className="stats">
         <div>
           <span className="big">{snow.depth_cm} cm</span>
-          <span className="label">Schneehöhe (Modell)</span>
+          <span className="label">Schneehöhe</span>
         </div>
         <div>
           <span className="big">{km(distance_km)}</span>
