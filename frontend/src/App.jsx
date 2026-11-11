@@ -299,20 +299,6 @@ function SourceInfo({ status, isGfs }) {
   );
 }
 
-const QUICK_DAYS = [
-  [-7, "Vor 1 Woche"],
-  [-1, "Gestern"],
-  [0, "Heute"],
-  [1, "Morgen"],
-  [7, "In 1 Woche"],
-];
-
-const addDays = (isoDate, n) => {
-  const d = new Date(`${isoDate}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-
 const toGerman = (isoDate) => (isoDate ? isoDate.split("-").reverse().join(".") : "");
 
 /** "13.11.2026", "13.11.26", "13.11." oder "2026-11-13" → "2026-11-13" (sonst null) */
@@ -406,22 +392,6 @@ function DayPicker({ days, day, onChange }) {
           />
         )}
       </form>
-      <div className="chips daypicker-quick">
-        {QUICK_DAYS.map(([offset, label]) => {
-          const iso = addDays(todayDate, offset);
-          return (
-            <button
-              key={offset}
-              type="button"
-              className={`chip ${iso === selected ? "active" : ""}`}
-              disabled={!available.has(iso)}
-              onClick={() => go(iso)}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
       {msg && (
         <p className="msg" id="day-msg">
           {msg}

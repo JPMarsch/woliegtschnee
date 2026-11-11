@@ -392,10 +392,9 @@ input:focus-visible,
 .calendar {
   position: absolute;
   top: calc(100% + 6px);
+  left: 0;
   right: 0;
   z-index: 1100;
-  width: 272px;
-  max-width: calc(100vw - 32px);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -455,7 +454,7 @@ input:focus-visible,
 }
 
 .calendar-grid button {
-  aspect-ratio: 1;
+  height: 40px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: none;
